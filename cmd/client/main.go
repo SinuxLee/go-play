@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/panjf2000/gnet/v2"
+	"github.com/google/gops/agent"
 )
 
 const (
@@ -25,23 +25,19 @@ func init() {
 }
 
 func main() {
-	handler := NewEventHandler()
-	cli, err := gnet.NewClient(
-		handler,
-		gnet.WithTicker(true),
-		gnet.WithTCPNoDelay(gnet.TCPNoDelay),
-		gnet.WithLockOSThread(true),
-		gnet.WithMulticore(true),
-	)
+	if err := agent.Listen(agent.Options{
+		ShutdownCleanup: true,
+	}); err != nil {
+		log.Fatal(err)
+	}
 
+	h, err := NewEventHandler()
 	if err != nil {
 		log.Fatalf("%v\n", err.Error())
 	}
 
-	cli.Start()
-
 	for i := 0; i < numClients; i++ {
-		_, err := cli.Dial("tcp", addr)
+		_, err := h.Connect(addr)
 		if err != nil {
 			log.Printf("Error connecting: %v\n", err.Error())
 			continue
