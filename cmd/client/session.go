@@ -66,9 +66,6 @@ func (s *Session) OnData(data []byte) error {
 
 func (s *Session) OnTick() {
 	now := time.Now().UnixMilli()
-	if now-s.activeTime < 100 {
-		return
-	}
 
 	data, _ := json.Marshal(s.player)
 	if err := s.handler.Send(s.conn, data); err != nil {

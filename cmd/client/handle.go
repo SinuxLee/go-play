@@ -9,6 +9,7 @@ import (
 
 	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/panjf2000/gnet/v2"
+	"github.com/panjf2000/gnet/v2/pkg/buffer/ring"
 )
 
 func NewEventHandler() (*EventHandler, error) {
@@ -23,6 +24,8 @@ func NewEventHandler() (*EventHandler, error) {
 		gnet.WithTCPNoDelay(gnet.TCPNoDelay),
 		gnet.WithLockOSThread(true),
 		gnet.WithMulticore(true),
+		gnet.WithReadBufferCap(8*ring.DefaultBufferSize),
+		gnet.WithReadBufferCap(8*ring.DefaultBufferSize),
 	)
 
 	if err != nil {
@@ -82,7 +85,7 @@ func (h *EventHandler) OnTick() (delay time.Duration, action gnet.Action) {
 		v.OnTick()
 	})
 
-	return time.Millisecond * 10, gnet.None
+	return time.Second, gnet.None
 }
 
 func (h *EventHandler) Send(conn gnet.Conn, data []byte) error {

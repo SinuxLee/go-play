@@ -10,6 +10,7 @@ import (
 
 	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/panjf2000/gnet/v2"
+	"github.com/panjf2000/gnet/v2/pkg/buffer/ring"
 )
 
 const heartbeatInterval = 3
@@ -35,6 +36,8 @@ func (h *EventHandler) Run(addr string) {
 		gnet.WithLockOSThread(true),
 		gnet.WithTCPNoDelay(gnet.TCPNoDelay),
 		gnet.WithTicker(true),
+		gnet.WithReadBufferCap(8*ring.DefaultBufferSize),
+		gnet.WithReadBufferCap(8*ring.DefaultBufferSize),
 	)
 }
 
