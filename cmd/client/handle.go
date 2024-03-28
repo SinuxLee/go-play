@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"io"
 	"log"
 	"time"
 
@@ -53,8 +54,8 @@ func (h *EventHandler) OnOpen(conn gnet.Conn) (out []byte, action gnet.Action) {
 	return nil, gnet.None
 }
 
-func (h *EventHandler) OnClose(c gnet.Conn, err error) (action gnet.Action) {
-	h.sessions.Remove(Conntion(c.Fd()))
+func (h *EventHandler) OnClose(conn gnet.Conn, err error) (action gnet.Action) {
+	h.sessions.Remove(Conntion(conn.Fd()))
 	if err != nil {
 		log.Printf("closed %v\n", err.Error())
 	}
@@ -62,22 +63,29 @@ func (h *EventHandler) OnClose(c gnet.Conn, err error) (action gnet.Action) {
 }
 
 func (h *EventHandler) OnTraffic(conn gnet.Conn) gnet.Action {
-	if s, ok := h.sessions.Get(Conntion(conn.Fd())); ok {
+	s, ok := h.sessions.Get(Conntion(conn.Fd()))
+	if !ok {
+		h.sessions.Remove(Conntion(conn.Fd()))
+		return gnet.Close
+	}
+
+	for {
 		data, err := h.coder.Decode(s.conn)
-		if errors.Is(err, codec.ErrIncompletePacket) {
+		if errors.Is(err, codec.ErrIncompletePacket) ||
+			errors.Is(err, io.ErrShortBuffer) {
 			return gnet.None
 		} else if err != nil {
 			log.Printf("can't decode err: %v", err.Error())
+			h.sessions.Remove(Conntion(conn.Fd()))
 			return gnet.Close
 		}
 
 		if err = s.OnData(data); err != nil {
 			log.Printf("can't handle body err: %v", err.Error())
+			h.sessions.Remove(Conntion(conn.Fd()))
 			return gnet.Close
 		}
 	}
-
-	return gnet.None
 }
 
 func (h *EventHandler) OnTick() (delay time.Duration, action gnet.Action) {
@@ -96,6 +104,7 @@ func (h *EventHandler) Send(conn gnet.Conn, data []byte) error {
 
 	return conn.AsyncWrite(buf, func(c gnet.Conn, err error) error {
 		if err != nil {
+			h.sessions.Remove(Conntion(conn.Fd()))
 			c.Close()
 		}
 		return nil

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"time"
 
@@ -43,7 +44,6 @@ func (h *EventHandler) Run(addr string) {
 
 func (h *EventHandler) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 	h.sessions.Set(Conntion(c.Fd()), NewSession(c, h))
-
 	return nil, gnet.None
 }
 
@@ -62,24 +62,31 @@ func (h *EventHandler) OnBoot(eng gnet.Engine) gnet.Action {
 }
 
 func (h *EventHandler) OnTraffic(c gnet.Conn) gnet.Action {
-	if s, ok := h.sessions.Get(Conntion(c.Fd())); ok {
-		s.activeTime = time.Now().Unix()
+	s, ok := h.sessions.Get(Conntion(c.Fd()))
+	if !ok {
+		h.sessions.Remove(Conntion(c.Fd()))
+		return gnet.Close
+	}
 
+	// 循环读取 buffer 中的消息
+	for {
 		data, err := h.coder.Decode(s.conn)
-		if errors.Is(err, codec.ErrIncompletePacket) {
+		if errors.Is(err, codec.ErrIncompletePacket) ||
+			errors.Is(err, io.ErrShortBuffer) {
 			return gnet.None
 		} else if err != nil {
+			h.sessions.Remove(Conntion(c.Fd()))
 			log.Printf("can't decode err: %v", err.Error())
 			return gnet.Close
 		}
 
 		if err = s.OnData(data); err != nil {
+			h.sessions.Remove(Conntion(c.Fd()))
 			log.Printf("can't handle body err: %v", err.Error())
 			return gnet.Close
 		}
+		s.activeTime = time.Now().Unix()
 	}
-
-	return gnet.None
 }
 
 func (h *EventHandler) OnTick() (delay time.Duration, action gnet.Action) {
@@ -123,6 +130,7 @@ func (h *EventHandler) Send(conn gnet.Conn, data []byte) error {
 
 	return conn.AsyncWrite(buf, func(c gnet.Conn, err error) error {
 		if err != nil {
+			h.sessions.Remove(Conntion(c.Fd()))
 			c.Close()
 		}
 		return nil
