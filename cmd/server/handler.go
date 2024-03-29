@@ -7,19 +7,31 @@ import (
 	"log"
 	"time"
 
-	"play/pkg/codec"
+	"play/internal/codec"
 
 	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/panjf2000/gnet/v2"
 	"github.com/panjf2000/gnet/v2/pkg/buffer/ring"
+	"go.uber.org/atomic"
 )
 
 const heartbeatInterval = 3
 
-func NewEventHandler() *EventHandler {
+type MessageMaker interface {
+	Process(s *Session, data []byte) error
+}
+
+type MakeMessageFun func(s *Session, data []byte) error
+
+func (f MakeMessageFun) Process(s *Session, data []byte) error {
+	return f(s, data)
+}
+
+func NewEventHandler(c codec.Coder, m MessageMaker) *EventHandler {
 	return &EventHandler{
 		sessions: cmap.NewStringer[Conntion, *Session](),
-		coder:    &codec.SimpleCodec{},
+		coder:    c,
+		maker:    m,
 	}
 }
 
@@ -28,7 +40,10 @@ type EventHandler struct {
 
 	eng      gnet.Engine
 	sessions cmap.ConcurrentMap[Conntion, *Session]
-	coder    *codec.SimpleCodec
+	coder    codec.Coder
+	maker    MessageMaker
+
+	recvCounter atomic.Uint32
 }
 
 func (h *EventHandler) Run(addr string) {
@@ -50,7 +65,7 @@ func (h *EventHandler) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 func (h *EventHandler) OnClose(c gnet.Conn, err error) (action gnet.Action) {
 	h.sessions.Remove(Conntion(c.Fd()))
 	if err != nil {
-		log.Printf("closed %v\n", err.Error())
+		log.Printf("%v closed, %v\n", c.Fd(), err.Error())
 	}
 
 	return gnet.Close
@@ -76,15 +91,21 @@ func (h *EventHandler) OnTraffic(c gnet.Conn) gnet.Action {
 			return gnet.None
 		} else if err != nil {
 			h.sessions.Remove(Conntion(c.Fd()))
-			log.Printf("can't decode err: %v", err.Error())
+			log.Printf("%v can't decode buf, err: %v\n", c.Fd(), err.Error())
 			return gnet.Close
 		}
 
-		if err = s.OnData(data); err != nil {
+		// Discard message
+		if h.maker == nil {
+			return gnet.None
+		}
+
+		if err = h.maker.Process(s, data); err != nil {
 			h.sessions.Remove(Conntion(c.Fd()))
-			log.Printf("can't handle body err: %v", err.Error())
+			log.Printf("%v can't handle body, err: %v\n", c.Fd(), err.Error())
 			return gnet.Close
 		}
+		h.recvCounter.Add(1)
 		s.activeTime = time.Now().Unix()
 	}
 }
@@ -118,7 +139,9 @@ func (h *EventHandler) OnTick() (delay time.Duration, action gnet.Action) {
 		h.sessions.Remove(v)
 	}
 
-	log.Printf("clients %v\n", h.sessions.Count())
+	log.Printf("clients %v, recv qps: %v \n", h.sessions.Count(), h.recvCounter.Load())
+
+	h.recvCounter.Store(0)
 	return time.Second, gnet.None
 }
 

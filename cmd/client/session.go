@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"play/pkg/schema"
+	"play/internal/schema"
 
 	"github.com/panjf2000/gnet/v2"
 )
@@ -52,16 +52,6 @@ type Session struct {
 	conn       gnet.Conn
 	activeTime int64
 	player     *schema.Player
-}
-
-func (s *Session) OnData(data []byte) error {
-	m := make(map[string]any)
-	if err := json.Unmarshal(data, &m); err != nil {
-		return err
-	}
-
-	// log.Printf("%+v\n", len(data))
-	return nil
 }
 
 func (s *Session) OnTick() {

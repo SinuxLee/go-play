@@ -8,8 +8,6 @@ import (
 	"github.com/panjf2000/gnet/v2"
 )
 
-var ErrIncompletePacket = errors.New("incomplete packet")
-
 const (
 	magicNumber     = 1314
 	magicNumberSize = 2

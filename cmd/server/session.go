@@ -2,9 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"play/pkg/schema"
 	"strconv"
 	"time"
+
+	"play/internal/schema"
 
 	"github.com/panjf2000/gnet/v2"
 )

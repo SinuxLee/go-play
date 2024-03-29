@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"log"
 	"time"
+
+	"play/internal/codec"
 
 	"github.com/google/gops/agent"
 )
@@ -31,7 +34,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	h, err := NewEventHandler()
+	h, err := NewEventHandler(&codec.SimpleCodec{}, MakeMessageFun(func(s *Session, data []byte) error {
+		m := make(map[string]any)
+		if err := json.Unmarshal(data, &m); err != nil {
+			return err
+		}
+
+		// log.Printf("%+v\n", len(data))
+		return nil
+	}))
+
 	if err != nil {
 		log.Fatalf("%v\n", err.Error())
 	}

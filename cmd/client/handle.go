@@ -6,17 +6,29 @@ import (
 	"log"
 	"time"
 
-	"play/pkg/codec"
+	"play/internal/codec"
 
 	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/panjf2000/gnet/v2"
 	"github.com/panjf2000/gnet/v2/pkg/buffer/ring"
+	"go.uber.org/atomic"
 )
 
-func NewEventHandler() (*EventHandler, error) {
+type MessageMaker interface {
+	Process(s *Session, data []byte) error
+}
+
+type MakeMessageFun func(s *Session, data []byte) error
+
+func (f MakeMessageFun) Process(s *Session, data []byte) error {
+	return f(s, data)
+}
+
+func NewEventHandler(c codec.Coder, m MessageMaker) (*EventHandler, error) {
 	h := &EventHandler{
 		sessions: cmap.NewStringer[Conntion, *Session](),
-		coder:    &codec.SimpleCodec{},
+		coder:    c,
+		maker:    m,
 	}
 
 	cli, err := gnet.NewClient(
@@ -42,7 +54,11 @@ type EventHandler struct {
 	cli *gnet.Client
 
 	sessions cmap.ConcurrentMap[Conntion, *Session]
-	coder    *codec.SimpleCodec
+	coder    codec.Coder
+	maker    MessageMaker
+
+	recvCounter atomic.Uint32
+	sendCounter atomic.Uint32
 }
 
 func (h *EventHandler) OnBoot(eng gnet.Engine) (action gnet.Action) {
@@ -80,18 +96,30 @@ func (h *EventHandler) OnTraffic(conn gnet.Conn) gnet.Action {
 			return gnet.Close
 		}
 
-		if err = s.OnData(data); err != nil {
+		// Discard message
+		if h.maker == nil {
+			continue
+		}
+
+		if err = h.maker.Process(s, data); err != nil {
 			log.Printf("can't handle body err: %v", err.Error())
 			h.sessions.Remove(Conntion(conn.Fd()))
 			return gnet.Close
 		}
+
+		h.recvCounter.Add(1)
 	}
 }
 
 func (h *EventHandler) OnTick() (delay time.Duration, action gnet.Action) {
 	h.sessions.IterCb(func(_ Conntion, v *Session) {
 		v.OnTick()
+		h.sendCounter.Add(1)
 	})
+
+	log.Printf("send qps %v, recv %v", h.sendCounter.Load(), h.recvCounter.Load())
+	h.recvCounter.Store(0)
+	h.sendCounter.Store(0)
 
 	return time.Second, gnet.None
 }

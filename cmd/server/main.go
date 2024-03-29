@@ -1,7 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
+
+	"play/internal/codec"
+	"play/internal/schema"
 
 	"github.com/google/gops/agent"
 )
@@ -17,6 +21,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	h := NewEventHandler()
+	h := NewEventHandler(&codec.SimpleCodec{}, MakeMessageFun(func(s *Session, data []byte) error {
+		p := &schema.Player{}
+		if err := json.Unmarshal(data, p); err != nil {
+			return err
+		}
+
+		return s.handler.Send(s.conn, data)
+	}))
 	h.Run("tcp://:8888")
 }
