@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -8,10 +9,14 @@ import (
 	"time"
 
 	"github.com/fasthttp/router"
+	"github.com/fasthttp/websocket"
 	"github.com/valyala/fasthttp"
 )
 
 var (
+	addr     = ""
+	upgrader = websocket.FastHTTPUpgrader{}
+
 	readTimeout, _         = time.ParseDuration("500ms")
 	writeTimeout, _        = time.ParseDuration("500ms")
 	maxIdleConnDuration, _ = time.ParseDuration("1h")
@@ -30,6 +35,39 @@ var (
 	}
 )
 
+func init() {
+	flag.StringVar(&addr, "addr", "localhost:8080", "http service address")
+	flag.Parse()
+
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+}
+
+func echoView(ctx *fasthttp.RequestCtx) {
+	err := upgrader.Upgrade(ctx, func(ws *websocket.Conn) {
+		defer ws.Close()
+		for {
+			mt, message, err := ws.ReadMessage()
+			if err != nil {
+				log.Println("read:", err)
+				break
+			}
+			log.Printf("recv: %s", message)
+
+			err = ws.WriteMessage(mt, message)
+			if err != nil {
+				log.Println("write:", err)
+				break
+			}
+		}
+	})
+
+	if err != nil {
+		if _, ok := err.(websocket.HandshakeError); ok {
+			log.Println(err)
+		}
+		return
+	}
+}
 func Index(ctx *fasthttp.RequestCtx) {
 	// buf := bytes.NewBufferString("")
 	// buf.Write(ctx.Method())
@@ -77,6 +115,7 @@ func Index(ctx *fasthttp.RequestCtx) {
 
 func main() {
 	r := router.New()
+	r.GET("/ws", echoView)
 	r.ANY("/{path:*}", Index)
 
 	compressHandler := fasthttp.CompressHandlerLevel(r.Handler, fasthttp.CompressDefaultCompression)
@@ -84,7 +123,12 @@ func main() {
 
 	log.Printf("%+v", r.List())
 
-	if err := fasthttp.ListenAndServe(":8080", timeoutHandler); err != nil {
+	server := fasthttp.Server{
+		Name:    "FastGate",
+		Handler: timeoutHandler,
+	}
+
+	if err := server.ListenAndServe(":8080"); err != nil {
 		log.Fatalf("Error in ListenAndServe: %s", err)
 	}
 }

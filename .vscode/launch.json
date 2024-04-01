@@ -5,18 +5,39 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "LaunchServer",
+            "name": "TCPServer",
             "type": "go",
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}/cmd/server/"
         },
         {
-            "name": "LaunchClient",
+            "name": "TCPClient",
             "type": "go",
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}/cmd/client/"
+        },
+        {
+            "name": "Fast",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/cmd/fast/"
+        },
+        {
+            "name": "WebsocketServer",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/cmd/wserver/"
+        },
+        {
+            "name": "WebsocketClient",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/cmd/wclient/"
         }
     ]
 }

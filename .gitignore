@@ -2,3 +2,5 @@
 *.tar.gz
 .vscode
 !.vscode/launch.json
+server
+client
